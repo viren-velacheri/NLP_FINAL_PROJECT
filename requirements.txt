@@ -1,0 +1,6 @@
+# Numerical computing
+numpy
+# Pytorch
+torch
+# HuggingFace transformers
+transformers
