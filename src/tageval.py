@@ -131,7 +131,7 @@ def evaluate_taggings(goldseq_predseq_pairs, ignore_labels=False):
 def read_tokens_tags_file(filename):
     """Returns list of sentences.  each sentence is a pair (tokens, tags), each
     of which is a list of strings of the same length."""
-    sentences = open(filename).read().strip().split("\n\n")
+    sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
     ret = []
     for sent in sentences:
         sent = sent.strip()
@@ -145,11 +145,33 @@ def read_tokens_tags_file(filename):
     return ret
 
 def read_tags_file(filename):
-    sentences = open(filename).read().strip().split("\n\n")
+    sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
     ret = []
     for sent in sentences:
         sent = sent.strip()
         lines = sent.split("\n")
+        for line in lines:
+            assert len(line.split())==1, "Was expecting 1 item per line"
+        ret.append( [line.strip() for line in lines] )
+    return ret
+
+def read_train_data(filename):
+    sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
+    ret = []
+    for sent in sentences:
+        sent = sent.strip()
+        lines = [l[:-1].strip() for l in sent.split("\n")]
+        for line in lines:
+            assert len(line.split())==1, "Was expecting 1 item per line"
+        ret.append( [line.strip() for line in lines] )
+    return ret
+
+def read_test_data(filename):
+    sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
+    ret = []
+    for sent in sentences:
+        sent = sent.strip()
+        lines = [l.strip() for l in sent.split("\n")]
         for line in lines:
             assert len(line.split())==1, "Was expecting 1 item per line"
         ret.append( [line.strip() for line in lines] )
