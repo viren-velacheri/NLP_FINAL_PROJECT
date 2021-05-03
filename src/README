@@ -1,3 +1,5 @@
 Simple evaluation script for NER tagger. 
 
 Requires Python 3.x to run.
+
+python run_model.py --ex-path data/test/test.nolabels.txt --save-out test.out --labeled false
