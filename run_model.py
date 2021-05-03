@@ -22,7 +22,7 @@ def main():
                             project_root, "outputs", "train.out"),
                         help="Path to the tagged output file.")
     parser.add_argument("--model-type", type=str, default="baseline",
-                        choices=["baseline"],
+                        choices=["baseline", 'stupid'],
                         help="Model type to train.")
     parser.add_argument("--labeled", type=str, default="true",
                         choices=["true", "false"],
@@ -43,18 +43,22 @@ def main():
     out = open(args.save_out, 'a')
 
     tagged_exs = []
+    
+    if args.model_type == 'stupid':
+        for ex in exs:
+            tagged_exs.append([(tok, 'O') for tok in ex])
 
-    if args.model_type == 'baseline':
+    elif args.model_type == 'baseline':
         model = Baseline()
         num_tagged = 0
         for ex in exs:
-            if num_tagged == 1770:
-                print(ex)
             tagged_exs.append(model.tag(ex))
             num_tagged += 1
-            print(num_tagged)
+            if num_tagged % 100 == 0:
+                print(num_tagged)
     
     for tags in tagged_exs:
+        print(tags)
         for tag in tags:
             if len(tag[1]) == 0:
                 out.write('O')

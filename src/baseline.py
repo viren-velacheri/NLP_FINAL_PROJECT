@@ -61,14 +61,16 @@ class Baseline:
             new_tags.append((orig_tok, tag))
             toks_processed += 1
 
-        if len(new_tags) >= 3 and new_tags[0][0] == 'RT' and new_tags[1][0][0] == '@' and new_tags[2][0] == ':':
-            new_tags[0] = (new_tags[0][0], 'O')
-            new_tags[1] = (new_tags[1][0], 'O')
-            new_tags[2] = (new_tags[2][0], 'O')
+        for i in range(len(new_tags)):
+            if new_tags[i][0] == 'RT' or new_tags[i][0] == ':' or '@' in new_tags[i][0]:
+                new_tags[i] = (new_tags[i][0], 'O')
 
         for i in range(1, len(new_tags)):
             if new_tags[i][1] == 'I' and new_tags[i-1][1] == 'O':
                 new_tags[i] = (new_tags[i][0], 'B')
+
+        if new_tags[0][1] == 'I':
+            new_tags[0] = (new_tags[0][0], 'B')
 
         return new_tags
             
