@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader
 
 from src.tageval import read_train_data
 from src.preprocess import preprocess
+from run_model import tag
+
+from src.distilbert import DistilBert
 
 def main():
     parser = argparse.ArgumentParser(
@@ -30,6 +33,9 @@ def main():
     parser.add_argument('--dropout', type=float,
                         default=0,
                         help='Dropout rate.')
+    parser.add_argument('--model-type', type=str, default='distilbert',
+                        choices=['distilbert'], help='Model type to train.')
+    parser.add_argument('--save-dir', type=str, default='', help='Directory to save model checkpoints.')
 
     args = parser.parse_args()
     texts, tags = read_train_data(args.ex_path)
@@ -38,7 +44,11 @@ def main():
     dataset, tag2id, id2tag = preprocess(texts, tags, tokenizer)
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    model = DistilBert(dropout=args.dropout)
+
+    model = None
+    if args.model_type == 'distilbert':
+        model = DistilBert(dropout=args.dropout)
+
     model.to(device)
     model.train()
 
@@ -46,7 +56,7 @@ def main():
 
     optim = AdamW(model.parameters(), lr=5e-5)
 
-    for _ in tqdm(range(args.epochs), unit='epoch'):
+    for epoch in tqdm(range(args.epochs), unit='epoch'):
         for batch in tqdm(train_loader, unit='batch'):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -56,52 +66,17 @@ def main():
             loss.backward()
             optim.step()
 
+        if epoch + 1 % 5 == 0:
+            torch.save(model, args.save_dir + '/' + args.model_type + '_epoch_' + str(epoch + 1))
+
     model.eval()
+
+    # TODO: evaluate on training and validation sets
     eval_loader = DataLoader(dataset)
+    i = 0
     for batch in eval_loader:
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        labels = batch['labels'].to(device)
         outputs = model(input_ids, attention_mask=attention_mask)
-        print(outputs[1])
-        exit()
-
-class DistilBert(nn.Module):
-    def __init__(self, dropout):
-        self.init_arguments = locals()
-        self.init_arguments.pop("self")
-        self.init_arguments.pop("__class__")
-        super(DistilBert, self).__init__()
-
-        # self.config = DistilBertConfig(dropout=dropout, hidden_dim=hidden_dim, n_layers=layers, n_heads=heads)
-        self.distilbert = DistilBertModel.from_pretrained('distilbert-base-cased')
-            
-        self.tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-cased')
-
-        self.linear = nn.Linear(self.distilbert.config.dim, 3)
-        self.dropout = nn.Dropout(dropout)
-        self.softmax = nn.LogSoftmax(dim=2)
-
-    
-    def forward(self, input_ids, attention_mask, labels=None):
-        outputs = self.distilbert(input_ids, attention_mask=attention_mask)
-
-        sequence_output = self.dropout(outputs[0])
-
-        logits = self.linear(sequence_output)
         
-        logits = self.softmax(logits)
-
-        loss = None
-        if labels != None:
-            cross_entropy = CrossEntropyLoss()
-            active_loss = attention_mask.view(-1) == 1
-            active_logits = logits.view(-1, 3)
-            active_labels = torch.where(active_loss, labels.view(-1), torch.tensor(cross_entropy.ignore_index).type_as(labels))
-            loss = cross_entropy(active_logits, active_labels)
-
-        return (loss, logits)
-
-
-if __name__ == '__main__':
-    main()
+        original_toks = texts[i]

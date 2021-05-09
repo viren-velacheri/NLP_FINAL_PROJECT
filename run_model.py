@@ -1,20 +1,10 @@
 import argparse
-import logging
 import os
-import shutil
-import sys
-import numpy as np
 import tqdm
 import torch
-import torch.nn as nn
-from torch.nn.functional import nll_loss
-import random
 
 from src.baseline import Baseline
-from src.tageval import read_train_data, read_test_data, one_hot_label, char_label, new_label, read_labels_file
-from distilbert import DistilBert
-
-from transformers import AdamW
+from src.tageval import read_train_data, read_test_data
 
 def main():
     parser = argparse.ArgumentParser(
@@ -24,36 +14,24 @@ def main():
 
     parser.add_argument("--ex-path", type=str,
                         default=os.path.join(
-                            project_root, "data", 'train', "train.txt"),
-                        help="Path to the training data.")
+                            project_root, "data", 'test', "test.nolabels.txt"),
+                        help="Path to examples to tag.")
+    parser.add_argument("--load-path", type=str,
+                        help="Path to model to run on examples.")
     parser.add_argument("--save-out", type=str,
                         default=os.path.join(
                             project_root, "outputs", "train.out"),
                         help="Path to the tagged output file.")
-    parser.add_argument("--model-type", type=str, default="baseline",
-                        choices=["baseline", 'stupid', 'distilbert'],
-                        help="Model type to train.")
     parser.add_argument("--labeled", action="store_true",
                         help="Type of training data given.")
-    parser.add_argument("--cuda", action="store_true",
-                        help="Train or evaluate with GPU.")
-    parser.add_argument("--label-path", type=str,
-                        default=os.path.join(
-                            project_root, "data", 'train', "train_labels.txt"),
-                        help="Path to the example labels.")
-    parser.add_argument('--epochs', type=int,
-                        default=25,
-                        help='Number of epochs to train model for.')
 
     args = parser.parse_args()
     if os.path.exists(args.save_out):
         os.remove(args.save_out)
 
     exs = None
-    labels = None
     if args.labeled:
         exs, _ = read_train_data(args.ex_path)
-        labels = read_labels_file(args.label_path)
     else:
         exs = read_test_data(args.ex_path)
 
@@ -63,33 +41,19 @@ def main():
 
     tagged_exs = []
     
-    if args.model_type == 'stupid':
-        for ex in exs:
-            tagged_exs.append([(tok, 'O') for tok in ex])
+    # if args.model_type == 'stupid':
+    #     for ex in exs:
+    #         tagged_exs.append([(tok, 'O') for tok in ex])
 
-    elif args.model_type == 'baseline':
-        model = Baseline()
-        num_tagged = 0
-        for ex in exs:
-            tagged_exs.append(model.tag(ex))
-            num_tagged += 1
-            if num_tagged % 100 == 0:
-                print(num_tagged)
-    
-    elif args.model_type == 'distilbert':
-        print('Training distilBERT model')
-        model = DistilBert(args.cuda)
-        if args.cuda:
-            model.cuda()
-
-        optimizer = AdamW(model.parameters())
-        for i in tqdm(range(args.epochs), unit='epoch'):
-            train_epoch(model, exs, labels, optimizer)
-
-        
-        exit()
-        
-        
+    # elif args.model_type == 'baseline':
+    #     model = Baseline()
+    #     num_tagged = 0
+    #     for ex in exs:
+    #         tagged_exs.append(model.tag(ex))
+    #         num_tagged += 1
+    #         if num_tagged % 100 == 0:
+    #             print(num_tagged)    
+    saved_state_dict = torch.load(args.load_path, map_location=None if args.cuda else lambda storage, loc: storage)
     
     for tags in tagged_exs:
         print(tags)
@@ -103,25 +67,55 @@ def main():
     
     out.close()
 
-def train_epoch(model, exs, labels, optimizer):
-    exs, labels = shuffle(exs, labels)
-    batch_size = 32
-    model.train()
-    i = 0
-    while i < len(exs):
-        batch = model.tokenizer(exs[i:min(i + batch_size, len(exs))], add_special_tokens=False, is_split_into_words=True, padding=True, return_tensors='pt')
-        output = model(**batch)
-        loss = nll_loss(output, labels)
+def tag(self, original_toks, model_toks, outputs):
+        original_toks = [i.encode('ascii', 'ignore').decode('ascii') if i != 'n\'t' else 'not' for i in original_toks]
+        predictions = torch.argmax(outputs, dim=2)
+
+        tags = [(token, self.label_list[prediction][0]) for token, prediction in zip(model_toks, predictions[0].tolist())]
+        for i in range(1, len(tags)):
+            if tags[i][1] == 'I' and tags[i-1][1] == 'O':
+                tags[i] = (tags[i][0], 'B')
         
+        tags = tags[1:-1]
+        tokens = model_toks[1:-1]
 
-        i += batch_size
-    
-    raise NotImplementedError
+        toks_processed = 0
+        new_tags = []
+        index = 0
+        while toks_processed < len(original_toks):
+            orig_tok = original_toks[toks_processed]
+            tok_so_far = ''
+            tag = ''
+            while index < len(tags) and orig_tok != tok_so_far:
+                if len(tok_so_far) == 0:
+                    tag = tags[index][1]
+                    
 
-def shuffle(exs, labels):
-    temp = list(zip(exs, labels))
-    random.shuffle(temp)
-    return zip(*temp)
+                tok_to_add = ''
+                if len(tokens[index]) <= 2 or tokens[index][:2] != '##':
+                    tok_to_add = tokens[index]
+                else:
+                    tok_to_add = tokens[index][2:]
+            
+                tok_so_far += tok_to_add
+                index += 1
+            
+            new_tags.append((orig_tok, tag))
+            toks_processed += 1
+
+        for i in range(len(new_tags)):
+            if new_tags[i][0] == 'RT' or new_tags[i][0] == ':' or '@' in new_tags[i][0]:
+                new_tags[i] = (new_tags[i][0], 'O')
+
+        for i in range(1, len(new_tags)):
+            if new_tags[i][1] == 'I' and new_tags[i-1][1] not in 'BI':
+                new_tags[i] = (new_tags[i][0], 'B')
+
+        if new_tags[0][1] == 'I':
+            new_tags[0] = (new_tags[0][0], 'B')
+
+        return new_tags
+
 
 if __name__ == '__main__':
     main()
