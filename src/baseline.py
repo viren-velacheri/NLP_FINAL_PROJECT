@@ -66,7 +66,7 @@ class Baseline:
                 new_tags[i] = (new_tags[i][0], 'O')
 
         for i in range(1, len(new_tags)):
-            if new_tags[i][1] == 'I' and new_tags[i-1][1] == 'O':
+            if new_tags[i][1] == 'I' and new_tags[i-1][1] not in 'BI':
                 new_tags[i] = (new_tags[i][0], 'B')
 
         if new_tags[0][1] == 'I':

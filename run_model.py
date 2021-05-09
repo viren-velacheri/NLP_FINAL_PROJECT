@@ -3,9 +3,18 @@ import logging
 import os
 import shutil
 import sys
+import numpy as np
+import tqdm
+import torch
+import torch.nn as nn
+from torch.nn.functional import nll_loss
+import random
 
 from src.baseline import Baseline
-from src.tageval import read_train_data, read_test_data
+from src.tageval import read_train_data, read_test_data, one_hot_label, char_label, new_label, read_labels_file
+from distilbert import DistilBert
+
+from transformers import AdamW
 
 def main():
     parser = argparse.ArgumentParser(
@@ -22,19 +31,29 @@ def main():
                             project_root, "outputs", "train.out"),
                         help="Path to the tagged output file.")
     parser.add_argument("--model-type", type=str, default="baseline",
-                        choices=["baseline", 'stupid'],
+                        choices=["baseline", 'stupid', 'distilbert'],
                         help="Model type to train.")
-    parser.add_argument("--labeled", type=str, default="true",
-                        choices=["true", "false"],
+    parser.add_argument("--labeled", action="store_true",
                         help="Type of training data given.")
+    parser.add_argument("--cuda", action="store_true",
+                        help="Train or evaluate with GPU.")
+    parser.add_argument("--label-path", type=str,
+                        default=os.path.join(
+                            project_root, "data", 'train', "train_labels.txt"),
+                        help="Path to the example labels.")
+    parser.add_argument('--epochs', type=int,
+                        default=25,
+                        help='Number of epochs to train model for.')
 
     args = parser.parse_args()
     if os.path.exists(args.save_out):
         os.remove(args.save_out)
 
     exs = None
-    if args.labeled == 'true':
-        exs = read_train_data(args.ex_path)
+    labels = None
+    if args.labeled:
+        exs, _ = read_train_data(args.ex_path)
+        labels = read_labels_file(args.label_path)
     else:
         exs = read_test_data(args.ex_path)
 
@@ -57,6 +76,21 @@ def main():
             if num_tagged % 100 == 0:
                 print(num_tagged)
     
+    elif args.model_type == 'distilbert':
+        print('Training distilBERT model')
+        model = DistilBert(args.cuda)
+        if args.cuda:
+            model.cuda()
+
+        optimizer = AdamW(model.parameters())
+        for i in tqdm(range(args.epochs), unit='epoch'):
+            train_epoch(model, exs, labels, optimizer)
+
+        
+        exit()
+        
+        
+    
     for tags in tagged_exs:
         print(tags)
         for tag in tags:
@@ -69,6 +103,25 @@ def main():
     
     out.close()
 
+def train_epoch(model, exs, labels, optimizer):
+    exs, labels = shuffle(exs, labels)
+    batch_size = 32
+    model.train()
+    i = 0
+    while i < len(exs):
+        batch = model.tokenizer(exs[i:min(i + batch_size, len(exs))], add_special_tokens=False, is_split_into_words=True, padding=True, return_tensors='pt')
+        output = model(**batch)
+        loss = nll_loss(output, labels)
+        
+
+        i += batch_size
+    
+    raise NotImplementedError
+
+def shuffle(exs, labels):
+    temp = list(zip(exs, labels))
+    random.shuffle(temp)
+    return zip(*temp)
 
 if __name__ == '__main__':
     main()

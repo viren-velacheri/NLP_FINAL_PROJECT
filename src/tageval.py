@@ -14,6 +14,7 @@ same as python slicing conventions
 
 from __future__ import division
 import re, sys
+import numpy as np
 
 def warning(msg):
     print("WARNING:"+ msg)
@@ -158,13 +159,30 @@ def read_tags_file(filename):
 def read_train_data(filename):
     sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
     ret = []
+    ret_labels = []
     for sent in sentences:
         sent = sent.strip()
         lines = [l[:-1].strip() for l in sent.split("\n")]
+        labels = [l[-1].strip() for l in sent.split("\n")]
         for line in lines:
             assert len(line.split())==1, "Was expecting 1 item per line"
-        ret.append( [line.strip() for line in lines] )
-    return ret
+        ret.append([i.strip().encode('ascii', 'ignore').decode('ascii') for i in lines])
+        ret_labels.append(labels)
+    return ret, ret_labels
+
+def one_hot_label(label):
+    if label == 'B':
+        return np.array([1, 0, 0])
+    elif label == 'I':
+        return np.array([0, 1, 0])
+    return np.array([0, 0, 1])
+
+def char_label(one_hot):
+    if one_hot[0] == 1:
+        return 'B'
+    elif one_hot[1] == 1:
+        return 'I'
+    return 'O'
 
 def read_test_data(filename):
     sentences = open(filename, encoding='utf-8').read().strip().split("\n\n")
@@ -176,6 +194,13 @@ def read_test_data(filename):
             assert len(line.split())==1, "Was expecting 1 item per line"
         ret.append( [line.strip() for line in lines] )
     return ret
+
+def read_labels_file(filename):
+    label_file = open(filename, encoding='utf-8').read().strip().split("\n\n")
+    ret = []
+    for sent in label_file:
+        ret.append(np.array([one_hot_label(l[0]) for l in sent.split('\n')]))
+    return np.array(ret)
 
 def evaluate_tagging_file(gold_tags_file, predicted_tags_file):
     tokens_and_tags = read_tokens_tags_file(gold_tags_file)
@@ -194,6 +219,24 @@ def evaluate_tagging_file(gold_tags_file, predicted_tags_file):
     # evaluate_taggings( list(zip(goldseqs, predtags)) )
     # print "Evaluation without types (is the span a name or not?)"
     evaluate_taggings( list(zip(goldseqs, predtags)), ignore_labels=True )
+
+def new_label(original_toks, new_toks, orig_tags):
+    new_tags = []
+    index = 0
+    tok_so_far = ''
+    for new_tok in new_toks:
+        new_tags.append(orig_tags[index])
+        if len(new_tok) <= 2 or new_tok[:2] != '##':
+            tok_so_far += new_tok
+        else:
+            tok_so_far += new_tok[2:]
+
+        if tok_so_far == original_toks[index]:
+            index += 1
+            tok_so_far = ''
+
+    assert len(new_tags) == len(new_toks)
+    return new_tags
 
 
 if __name__=='__main__':

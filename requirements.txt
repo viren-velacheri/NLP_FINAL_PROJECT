@@ -4,3 +4,5 @@ numpy
 torch
 # HuggingFace transformers
 transformers
+# Progress bar for training
+tqdm
