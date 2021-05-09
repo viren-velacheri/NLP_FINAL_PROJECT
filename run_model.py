@@ -53,8 +53,10 @@ def main():
     #         num_tagged += 1
     #         if num_tagged % 100 == 0:
     #             print(num_tagged)    
+
+    # TODO: implement this (should load a model and then run on given examples and write to the out file)
     saved_state_dict = torch.load(args.load_path, map_location=None if args.cuda else lambda storage, loc: storage)
-    
+
     for tags in tagged_exs:
         print(tags)
         for tag in tags:
@@ -67,6 +69,7 @@ def main():
     
     out.close()
 
+# TODO: make sure this works with pad/cls/sep tokens and stuff like that
 def tag(self, original_toks, model_toks, outputs):
         original_toks = [i.encode('ascii', 'ignore').decode('ascii') if i != 'n\'t' else 'not' for i in original_toks]
         predictions = torch.argmax(outputs, dim=2)
