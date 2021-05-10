@@ -67,7 +67,7 @@ def main():
             optim.step()
 
         if epoch + 1 % 5 == 0:
-            torch.save(model, args.save_dir + '/' + args.model_type + '_epoch_' + str(epoch + 1))
+            torch.save(model, args.save_dir + '/' + args.model_type + '_epoch_' + str(epoch + 1) + '.pt')
 
     model.eval()
 
