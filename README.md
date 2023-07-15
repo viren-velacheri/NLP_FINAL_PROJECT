@@ -1,4 +1,4 @@
-# NLP_FINAL_PROJECT
+# Natural Language Processing Final Project
 
 The goal of this project was to come up with a named-entity recognition model for a corpus of text from Twitter. This meant that for each tweet, the sub-spans of the words that
 represent the entities need to be identified. There were a total of 2,394 pretokenized tweets where each token was tagged as either **B, I, or O**. **B** means that the token is the
